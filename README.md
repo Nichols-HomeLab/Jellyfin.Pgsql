@@ -29,6 +29,12 @@ services:
         - /path/to/cache:/cache
         - /path/to/media:/media
     environment:
+        # Preferred single Npgsql connection string. This takes precedence over
+        # the legacy POSTGRES_* variables below.
+        - POSTGRES_CONNECTION_STRING=Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=change-me
+        # Optional large-library session tuning can be appended:
+        # - POSTGRES_CONNECTION_STRING=Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=change-me;Options=-c work_mem=32MB -c jit=off -c random_page_cost=1.1 -c effective_io_concurrency=200 -c effective_cache_size=8GB
+        # Legacy connection variables remain supported:
         - POSTGRES_HOST=
         - POSTGRES_PORT=
         - POSTGRES_DB=jellyfin
@@ -41,6 +47,13 @@ services:
       # Raise it if large libraries hit query timeouts.
       # - POSTGRES_COMMAND_TIMEOUT=120
 ```
+
+`JELLYFIN_POSTGRES_CONNECTION_STRING` is accepted as an alias for
+`POSTGRES_CONNECTION_STRING`. When a full connection string is supplied,
+include SSL, pooling, timeout, and session `Options` directly in that string.
+
+This fork also adds indexes for the hot `MediaSegments`, `BaseItems`, and
+`UserData` access paths used by library refresh, browse, Latest, and Next Up.
 
 # Build
 

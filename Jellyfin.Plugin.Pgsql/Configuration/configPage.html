@@ -9,22 +9,23 @@
         <div data-role="content">
             <div class="content-primary">
                 <h2>PostgreSQL Database Configuration</h2>
-                <p>This plugin uses environment variables for configuration. Set the following environment variables before starting Jellyfin:</p>
+                <p>This plugin uses environment variables for configuration. Prefer a single Npgsql connection string, or use the legacy individual variables.</p>
 
                 <div class="detailSection">
                     <div class="detailSectionHeader">
-                        <h3>Required Environment Variables</h3>
+                        <h3>Preferred Environment Variable</h3>
                     </div>
                     <div class="detailSectionContent">
                         <ul>
-                            <li><strong>POSTGRES_PASSWORD</strong> - Database password (required)</li>
+                            <li><strong>POSTGRES_CONNECTION_STRING</strong> - Complete Npgsql connection string</li>
+                            <li><strong>JELLYFIN_POSTGRES_CONNECTION_STRING</strong> - Alias for the same setting</li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="detailSection">
                     <div class="detailSectionHeader">
-                        <h3>Optional Environment Variables (with defaults)</h3>
+                        <h3>Legacy Environment Variables</h3>
                     </div>
                     <div class="detailSectionContent">
                         <ul>
@@ -32,6 +33,7 @@
                             <li><strong>POSTGRES_PORT</strong> - Database port (default: 5432)</li>
                             <li><strong>POSTGRES_DB</strong> - Database name (default: jellyfin)</li>
                             <li><strong>POSTGRES_USER</strong> - Database user (default: jellyfin)</li>
+                            <li><strong>POSTGRES_PASSWORD</strong> - Database password (required in legacy mode)</li>
                         </ul>
                     </div>
                 </div>
@@ -43,11 +45,7 @@
                     <div class="detailSectionContent">
                         <pre class="codeblock">
 environment:
-  - POSTGRES_HOST=postgres
-  - POSTGRES_PORT=5432
-  - POSTGRES_DB=jellyfin
-  - POSTGRES_USER=jellyfin
-  - POSTGRES_PASSWORD=your_secure_password</pre>
+  - POSTGRES_CONNECTION_STRING=Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=your_secure_password</pre>
                     </div>
                 </div>
             </div>

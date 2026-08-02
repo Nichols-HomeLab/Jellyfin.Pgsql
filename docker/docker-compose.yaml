@@ -8,6 +8,8 @@ services:
         restart: true
     environment:
       JELLYFIN_CACHE_DIR: /cache
+      POSTGRES_CONNECTION_STRING: Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=change-me
+      # Legacy connection variables may be used instead.
       POSTGRES_HOST: postgres
       POSTGRES_DB: jellyfin
 #      POSTGRES_PASSWORD: set a secure password

@@ -18,22 +18,24 @@ if [ "${ConfiguredPluginName}" != "PostgreSQL" ]; then
     exit 2;
 fi
 
-# Check env variables set
-if [ -z "${POSTGRES_HOST}" ]; then
-    echo "PostgreSQL connectionstring variable unset. Please set 'POSTGRES_HOST' 'POSTGRES_PORT' 'POSTGRES_DB' 'POSTGRES_USER' and 'POSTGRES_PASSWORD' then restart"
-    exit 3;
-fi
+# Prefer one Npgsql connection string. Keep the legacy variables as a fallback
+# for compatibility with existing deployments.
+ConnectionString="${POSTGRES_CONNECTION_STRING:-${JELLYFIN_POSTGRES_CONNECTION_STRING:-}}"
+if [ -z "${ConnectionString}" ]; then
+    if [ -z "${POSTGRES_HOST:-}" ] || [ -z "${POSTGRES_USER:-}" ] || [ -z "${POSTGRES_PASSWORD:-}" ]; then
+        echo "PostgreSQL connection is unset. Set POSTGRES_CONNECTION_STRING or the legacy POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, and POSTGRES_PASSWORD variables."
+        exit 3
+    fi
 
-# Build connection string for migration
-ConnectionString="Password=${POSTGRES_PASSWORD};User ID=${POSTGRES_USER};Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB}"
+    ConnectionString="Password=${POSTGRES_PASSWORD};User ID=${POSTGRES_USER};Host=${POSTGRES_HOST};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-jellyfin}"
 
-# Add SSL options if provided
-if [ -n "${POSTGRES_SSLMODE}" ]; then
-    ConnectionString="${ConnectionString};SSL Mode=${POSTGRES_SSLMODE}"
-fi
+    if [ -n "${POSTGRES_SSLMODE:-}" ]; then
+        ConnectionString="${ConnectionString};SSL Mode=${POSTGRES_SSLMODE}"
+    fi
 
-if [ -n "${POSTGRES_TRUSTSERVERCERTIFICATE}" ]; then
-    ConnectionString="${ConnectionString};Trust Server Certificate=${POSTGRES_TRUSTSERVERCERTIFICATE}"
+    if [ -n "${POSTGRES_TRUSTSERVERCERTIFICATE:-}" ]; then
+        ConnectionString="${ConnectionString};Trust Server Certificate=${POSTGRES_TRUSTSERVERCERTIFICATE}"
+    fi
 fi
 
 # Update database.xml with connection string

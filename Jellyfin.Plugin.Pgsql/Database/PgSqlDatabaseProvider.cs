@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Database.Implementations;
 using Jellyfin.Database.Implementations.DbConfiguration;
+using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -87,6 +88,19 @@ public sealed class PgSqlDatabaseProvider : IJellyfinDatabaseProvider
     {
         // Use C collation for consistent case-sensitive behavior matching SQLite BINARY
         modelBuilder.UseCollation("C");
+
+        // These access paths are heavily used by library browse, Next Up, media
+        // segment refresh, and item removal queries. Keep them in the provider
+        // model so new installations and future migrations retain the indexes.
+        modelBuilder.Entity<MediaSegment>()
+            .HasIndex(e => e.ItemId)
+            .HasDatabaseName("IX_MediaSegments_ItemId");
+        modelBuilder.Entity<BaseItemEntity>()
+            .HasIndex(e => new { e.TopParentId, e.PresentationUniqueKey, e.Id })
+            .HasDatabaseName("IX_BaseItems_TopParentId_PresentationUniqueKey_Id");
+        modelBuilder.Entity<UserData>()
+            .HasIndex(e => new { e.UserId, e.ItemId, e.LastPlayedDate })
+            .HasDatabaseName("IX_UserData_UserId_ItemId_LastPlayedDate");
 
         // Configure all DateTime properties to ensure UTC for PostgreSQL compatibility, matching SQLite provider
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
@@ -269,19 +283,38 @@ public sealed class PgSqlDatabaseProvider : IJellyfinDatabaseProvider
     {
         var includeErrorDetail = GetCustomDatabaseOption(options, "IncludeErrorDetail", e => e.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase), () => false);
         var logParameters = GetCustomDatabaseOption(options, "LogParameters", e => e.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase), () => false);
+        var configuredConnectionString = Environment.GetEnvironmentVariable("POSTGRES_CONNECTION_STRING")
+            ?? Environment.GetEnvironmentVariable("JELLYFIN_POSTGRES_CONNECTION_STRING");
 
-        var connectionBuilder = new NpgsqlConnectionStringBuilder
+        NpgsqlConnectionStringBuilder connectionBuilder;
+        if (!string.IsNullOrWhiteSpace(configuredConnectionString))
         {
-            Host = Environment.GetEnvironmentVariable("POSTGRES_HOST") ?? "jellyfin",
-            Port = int.Parse(Environment.GetEnvironmentVariable("POSTGRES_PORT") ?? "5432", CultureInfo.InvariantCulture),
-            Database = Environment.GetEnvironmentVariable("POSTGRES_DB") ?? "jellyfin",
-            Username = Environment.GetEnvironmentVariable("POSTGRES_USER") ?? "jellyfin",
-            Password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD") ?? throw new InvalidOperationException("PostgreSQL password must be provided via POSTGRES_PASSWORD environment variable"),
+            try
+            {
+                connectionBuilder = new NpgsqlConnectionStringBuilder(configuredConnectionString);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("POSTGRES_CONNECTION_STRING is not a valid Npgsql connection string", ex);
+            }
+        }
+        else
+        {
+            connectionBuilder = new NpgsqlConnectionStringBuilder
+            {
+                Host = Environment.GetEnvironmentVariable("POSTGRES_HOST") ?? "jellyfin",
+                Port = int.Parse(Environment.GetEnvironmentVariable("POSTGRES_PORT") ?? "5432", CultureInfo.InvariantCulture),
+                Database = Environment.GetEnvironmentVariable("POSTGRES_DB") ?? "jellyfin",
+                Username = Environment.GetEnvironmentVariable("POSTGRES_USER") ?? "jellyfin",
+                Password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD") ?? throw new InvalidOperationException("PostgreSQL password must be provided via POSTGRES_PASSWORD environment variable")
+            };
+        }
 
-            // Command timeout in seconds (0 = no limit). Defaults to Npgsql's 30s.
-            // Raise it via POSTGRES_COMMAND_TIMEOUT for slow queries on large libraries.
-            CommandTimeout = int.Parse(Environment.GetEnvironmentVariable("POSTGRES_COMMAND_TIMEOUT") ?? "30", CultureInfo.InvariantCulture)
-        };
+        var commandTimeout = Environment.GetEnvironmentVariable("POSTGRES_COMMAND_TIMEOUT");
+        if (commandTimeout is not null)
+        {
+            connectionBuilder.CommandTimeout = int.Parse(commandTimeout, CultureInfo.InvariantCulture);
+        }
 
         if (includeErrorDetail)
         {
