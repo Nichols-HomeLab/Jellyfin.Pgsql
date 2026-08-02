@@ -98,9 +98,16 @@ public sealed class PgSqlDatabaseProvider : IJellyfinDatabaseProvider
         modelBuilder.Entity<BaseItemEntity>()
             .HasIndex(e => new { e.TopParentId, e.PresentationUniqueKey, e.Id })
             .HasDatabaseName("IX_BaseItems_TopParentId_PresentationUniqueKey_Id");
+        modelBuilder.Entity<BaseItemEntity>()
+            .HasIndex(e => new { e.Type, e.TopParentId, e.SeriesPresentationUniqueKey })
+            .HasDatabaseName("IX_BaseItems_Type_TopParentId_SeriesPresentationUniqueKey");
         modelBuilder.Entity<UserData>()
             .HasIndex(e => new { e.UserId, e.ItemId, e.LastPlayedDate })
             .HasDatabaseName("IX_UserData_UserId_ItemId_LastPlayedDate");
+        modelBuilder.Entity<UserData>()
+            .HasIndex(e => new { e.UserId, e.LastPlayedDate, e.ItemId })
+            .HasDatabaseName("IX_UserData_UserId_LastPlayedDate_ItemId")
+            .HasFilter("\"LastPlayedDate\" IS NOT NULL");
 
         // Configure all DateTime properties to ensure UTC for PostgreSQL compatibility, matching SQLite provider
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

@@ -1,0 +1,6 @@
+.git
+**/.git
+**/bin
+**/obj
+**/TestResults
+dotnet

@@ -55,6 +55,14 @@ include SSL, pooling, timeout, and session `Options` directly in that string.
 This fork also adds indexes for the hot `MediaSegments`, `BaseItems`, and
 `UserData` access paths used by library refresh, browse, Latest, and Next Up.
 
+The container includes a pinned Jellyfin 10.11.11 server-implementation build
+from `Nichols-HomeLab/jellyfin`. Its PostgreSQL query generator replaces
+spill-heavy `GroupBy(...).FirstOrDefault()` window queries with a stable UUID
+aggregate, uses split queries for navigation collections, limits Latest to its
+selected series or album keys, filters Next Up history before grouping, and
+adds deterministic ID tie-breaking for paged results. SQLite retains the
+upstream query paths.
+
 # Build
 
 Checkout the Jellyfin submodule.
