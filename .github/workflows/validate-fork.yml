@@ -1,0 +1,107 @@
+name: Validate custom fork
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-container-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Verify custom patches remain present
+        run: |
+          set -eu
+          test -f Jellyfin.Plugin.Pgsql/Migrations/20260802111057_AddJellyfinPerformanceIndexes.cs
+          test -f Jellyfin.Plugin.Pgsql/Migrations/20260802113543_AddQueryGeneratorSupport.cs
+          git grep -q "POSTGRES_CONNECTION_STRING" -- docker Jellyfin.Plugin.Pgsql
+
+      - name: Build custom image
+        run: docker build -t jellyfin-pgsql-custom:test -f docker/Dockerfile .
+
+      - name: Start PostgreSQL-backed Jellyfin and validate recovery
+        run: |
+          set -eu
+          suffix="${{ github.run_id }}-${{ github.run_attempt }}"
+          network="jellyfin-pgsql-test-${suffix}"
+          postgres="jellyfin-pgsql-db-${suffix}"
+          jellyfin="jellyfin-pgsql-app-${suffix}"
+          config_volume="jellyfin-pgsql-config-${suffix}"
+          cache_volume="jellyfin-pgsql-cache-${suffix}"
+
+          cleanup() {
+            docker rm -f "${jellyfin}" "${postgres}" >/dev/null 2>&1 || true
+            docker volume rm "${config_volume}" "${cache_volume}" >/dev/null 2>&1 || true
+            docker network rm "${network}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "${network}"
+          docker volume create "${config_volume}"
+          docker volume create "${cache_volume}"
+          docker run -d \
+            --name "${postgres}" \
+            --network "${network}" \
+            --network-alias postgres \
+            -e POSTGRES_DB=jellyfin \
+            -e POSTGRES_USER=jellyfin \
+            -e POSTGRES_PASSWORD=test-only-password \
+            postgres:18
+
+          for attempt in $(seq 1 30); do
+            if docker exec "${postgres}" pg_isready -U jellyfin -d jellyfin >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs "${postgres}"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker run -d \
+            --name "${jellyfin}" \
+            --network "${network}" \
+            --network-alias jellyfin \
+            -e POSTGRES_CONNECTION_STRING="Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=test-only-password" \
+            -v "${config_volume}:/config" \
+            -v "${cache_volume}:/cache" \
+            jellyfin-pgsql-custom:test
+
+          for attempt in $(seq 1 60); do
+            if docker run --rm --network "${network}" curlimages/curl:8.17.0 \
+              -fsS http://jellyfin:8096/health >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              docker logs "${jellyfin}"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          sleep 30
+          docker run --rm --network "${network}" curlimages/curl:8.17.0 \
+            -fsS http://jellyfin:8096/health >/dev/null
+
+          table_count="$(docker exec "${postgres}" psql -U jellyfin -d jellyfin -Atc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")"
+          test "${table_count}" -gt 0
+
+          docker exec "${postgres}" psql -U jellyfin -d jellyfin -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE fork_smoke_test (id integer PRIMARY KEY); INSERT INTO fork_smoke_test VALUES (1); SELECT * FROM fork_smoke_test; DROP TABLE fork_smoke_test;"
+          docker exec "${postgres}" pg_dump -U jellyfin -d jellyfin -Fc -f /tmp/jellyfin.dump
+          docker exec "${postgres}" createdb -U jellyfin jellyfin_restore
+          docker exec "${postgres}" pg_restore -U jellyfin -d jellyfin_restore --exit-on-error /tmp/jellyfin.dump

@@ -1,0 +1,79 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "17 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout custom repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Update clean upstream mirror
+        env:
+          UPSTREAM_BRANCH: ${{ vars.UPSTREAM_BRANCH }}
+          UPSTREAM_URL: ${{ vars.UPSTREAM_URL }}
+        run: |
+          set -eu
+
+          git config user.name "Upstream Sync Bot"
+          git config user.email "upstream-sync@nicholstech.org"
+          git remote add source-upstream "${UPSTREAM_URL}"
+          git fetch --prune source-upstream "${UPSTREAM_BRANCH}"
+          git checkout -B upstream "source-upstream/${UPSTREAM_BRANCH}"
+          git push origin upstream --force-with-lease
+
+      - name: Prepare reviewable merge
+        env:
+          UPSTREAM_BRANCH: ${{ vars.UPSTREAM_BRANCH }}
+        run: |
+          set -eu
+
+          git fetch origin main upstream
+          git checkout -B upstream-sync origin/main
+
+          if git merge --no-edit --no-ff origin/upstream; then
+            if git diff --quiet origin/main...HEAD; then
+              echo "No upstream changes to merge."
+              exit 0
+            fi
+          else
+            echo "Upstream merge has conflicts; origin/upstream is still current."
+            git merge --abort
+            exit 1
+          fi
+
+          git commit --amend -m "chore: merge upstream ${UPSTREAM_BRANCH}"
+          git push origin upstream-sync --force-with-lease
+
+      - name: Create or update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+
+          if git diff --quiet origin/main...upstream-sync; then
+            exit 0
+          fi
+
+          if gh pr view upstream-sync --json number >/dev/null 2>&1; then
+            number="$(gh pr view upstream-sync --json number --jq .number)"
+            echo "Updated existing upstream PR #${number}."
+          else
+            gh pr create \
+              --base main \
+              --head upstream-sync \
+              --title "chore: merge upstream" \
+              --body "Automated upstream merge for manual review. Build, migration, health, and backup/restore checks must pass before merging."
+          fi
