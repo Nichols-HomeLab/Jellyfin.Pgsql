@@ -9,9 +9,20 @@ mkdir -p /config/plugins /config/config
 exec 9>/config/.pgsql-init.lock
 flock -x 9
 
-SourcePluginDll="/jellyfin-pgsql/plugin/Jellyfin.Plugin.Pgsql.dll"
-InstalledPluginDll="/config/plugins/PostgreSQL/Jellyfin.Plugin.Pgsql.dll"
-if [ ! -f "${InstalledPluginDll}" ] || ! cmp -s "${SourcePluginDll}" "${InstalledPluginDll}"; then
+plugin_payload_hash() {
+    (
+        cd "$1"
+        find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1
+    )
+}
+
+SourcePluginHash="$(plugin_payload_hash /jellyfin-pgsql/plugin)"
+InstalledPluginHash=""
+if [ -d /config/plugins/PostgreSQL ]; then
+    InstalledPluginHash="$(plugin_payload_hash /config/plugins/PostgreSQL)"
+fi
+
+if [ "${SourcePluginHash}" != "${InstalledPluginHash}" ]; then
     PluginStage="$(mktemp -d /config/plugins/.PostgreSQL.XXXXXX)"
     PluginBackup="/config/plugins/.PostgreSQL.previous.$$"
     trap 'rm -rf "${PluginStage:-}" "${PluginBackup:-}"' EXIT
