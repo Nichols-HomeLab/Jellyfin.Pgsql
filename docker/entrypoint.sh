@@ -6,7 +6,7 @@ set -euo pipefail
 # plugin/config initialization and replace the plugin directory atomically so a
 # peer can never observe a partially copied provider.
 mkdir -p /config/plugins /config/config
-exec 9>/config/.jellyfin-pgsql-init.lock
+exec 9>/config/config/.jellyfin-pgsql-init.lock
 flock -x 9
 
 SourcePluginDll="/jellyfin-pgsql/plugin/Jellyfin.Plugin.Pgsql.dll"
