@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="10.11.11" PrivateAssets="all" />
     <PackageReference Include="Jellyfin.Model" Version="10.11.11" PrivateAssets="all" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!-- Jellyfin 10.11.11 loads Npgsql 9.0.3 into the default context before
          database providers initialize. Match that assembly version so the
          provider can be loaded in-process. -->
