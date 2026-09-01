@@ -24,7 +24,7 @@
         }
     },
     "features": {
-        "ghcr.io/devcontainers/features/dotnet:2": {
+        "ghcr.io/devcontainers/features/dotnet:2@sha256:0fc16547ed4db6d7ff2a9f5981d2b93eb314e568affb9958029ad794f1f9a093": {
             "version": "none",
             "dotnetRuntimeVersions": "9.0",
             "aspNetCoreRuntimeVersions": "9.0"
@@ -35,11 +35,11 @@
         //         "libfontconfig1"
         //     ]
         // },
-        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2@sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c": {
             "dockerDashComposeVersion": "v2"
         },
-        "ghcr.io/devcontainers/features/github-cli:1": {},
-        "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {}
+        "ghcr.io/devcontainers/features/github-cli:1@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671": {},
+        "ghcr.io/eitsupi/devcontainer-features/jq-likes:2@sha256:6a8b044f9f424097ec6d212167836b26994a76a556cbcb202084be79fe8032bd": {}
     },
     "hostRequirements": {
         "memory": "8gb",
