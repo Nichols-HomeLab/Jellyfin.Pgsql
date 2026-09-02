@@ -38,7 +38,7 @@
         "ghcr.io/devcontainers/features/docker-in-docker:4@sha256:7d979c4a36d595eb4ab79909caa3f396daf3b6152dcf38e8328ea4eff42206c7": {
             "dockerDashComposeVersion": "v2"
         },
-        "ghcr.io/devcontainers/features/github-cli:1@sha256:94879eebb6a0e4e2f197de9f12db7427cb4a25b82d93c55239ce8c8fc394a1b4": {},
+        "ghcr.io/devcontainers/features/github-cli:1@sha256:7c409bf6316ffd85f04fd92fba85a744282639e603417dd4796409866bdb6805": {},
         "ghcr.io/eitsupi/devcontainer-features/jq-likes:2@sha256:6a8b044f9f424097ec6d212167836b26994a76a556cbcb202084be79fe8032bd": {}
     },
     "hostRequirements": {
