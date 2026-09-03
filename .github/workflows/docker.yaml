@@ -17,13 +17,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          # Recursive checkout hits the nested plugins/Jellyfin.Pgsql
+          # submodule (an SSH URL gitea runners cannot clone). The build only
+          # needs the top-level jellyfin submodule, so fetch it explicitly.
+          submodules: true
+      - name: Init jellyfin submodule
+        run: git submodule update --init --depth 1 jellyfin
 
       - name: Determine image version
         id: version
         run: |
           # Extract the Jellyfin base version from the Dockerfile (handles optional AS alias)
-          JELLYFIN_VERSION=$(grep -oP '(?<=FROM jellyfin/jellyfin:)[^\s]+' docker/Dockerfile | head -1)
+          # Strip any digest suffix: the FROM line is digest-pinned, and the
+          # naive [^\s]+ capture would include @sha256:... in the tag.
+          JELLYFIN_VERSION=$(grep -oP '(?<=FROM jellyfin/jellyfin:)[^@\s]+' docker/Dockerfile | head -1)
           echo "jellyfin_version=$JELLYFIN_VERSION" >> "$GITHUB_OUTPUT"
 
           IMAGE_OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
