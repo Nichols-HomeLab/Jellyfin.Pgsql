@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <JellyfinSourceRoot Condition="'$(JellyfinSourceRoot)' == ''">$(MSBuildThisFileDirectory)..\..\jellyfin</JellyfinSourceRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="all" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <ProjectReference Include="../../Jellyfin.Plugin.Pgsql/Jellyfin.Plugin.Pgsql.csproj" />
+    <ProjectReference Include="$(JellyfinSourceRoot)/src/Jellyfin.Database/Jellyfin.Database.Implementations/Jellyfin.Database.Implementations.csproj" />
+    <ProjectReference Include="$(JellyfinSourceRoot)/MediaBrowser.Common/MediaBrowser.Common.csproj" />
+    <ProjectReference Include="$(JellyfinSourceRoot)/src/Jellyfin.Database/Jellyfin.Database.Providers.Sqlite/Jellyfin.Database.Providers.Sqlite.csproj" />
+    <None Include="../../docker/jellyfindb.load" Link="jellyfindb.load" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

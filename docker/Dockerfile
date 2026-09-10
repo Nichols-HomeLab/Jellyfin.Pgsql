@@ -1,26 +1,33 @@
-# Build stage
-# Context hint: project root ../
-# sudo docker build -t ghcr.io/jpvenson/jellyfin.pgsql:10.11.0-1 -f ./Dockerfile ../
-FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine@sha256:a63e271360552d87b556a2c1a78cfdfd2519ec33137acdce9ac16cff939f1ac0 AS build
+# Build the provider and matching patched server from the pinned submodule.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:4ea6fe75dd36706bb6d8c3c293d4c4315840f5d76ea28ac97def77e3ec487fa5 AS build
 WORKDIR /src
-
-# Copy project files
-COPY jellyfin.ruleset .
-COPY Jellyfin.Plugin.Pgsql.sln .
-COPY build.yaml .
+COPY jellyfin.ruleset Jellyfin.Plugin.Pgsql.sln build.yaml ./
 COPY Jellyfin.Plugin.Pgsql/ ./Jellyfin.Plugin.Pgsql/
 COPY jellyfin/ ./jellyfin/
+RUN dotnet publish Jellyfin.Plugin.Pgsql/Jellyfin.Plugin.Pgsql.csproj \
+    -c Release -o /app/plugin
+RUN mkdir /app/provider && cp /app/plugin/Jellyfin.Plugin.Pgsql.dll /app/plugin/Npgsql*.dll /app/provider/
+RUN dotnet publish jellyfin/Jellyfin.Server/Jellyfin.Server.csproj \
+    -c Release -r linux-x64 --self-contained true -o /app/server
 
-# Restore and publish the provider, then build the patched Jellyfin query
-# generator from the pinned Jellyfin fork.
-RUN dotnet restore Jellyfin.Plugin.Pgsql.sln
-RUN dotnet restore jellyfin/Jellyfin.Server.Implementations/Jellyfin.Server.Implementations.csproj
-RUN dotnet publish Jellyfin.Plugin.Pgsql/Jellyfin.Plugin.Pgsql.csproj -c Release --no-restore -o /app/publish
-RUN dotnet build jellyfin/Jellyfin.Server.Implementations/Jellyfin.Server.Implementations.csproj \
-    -c Release --no-restore -o /app/jellyfin-server
+# CI-only target shares the exact published server with the production image.
+FROM build AS tests
+COPY tests/ ./tests/
+COPY docker/ ./docker/
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 wget ca-certificates gnupg lsb-release \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] https://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 pgloader \
+    && rm -rf /var/lib/apt/lists/*
+RUN dotnet build tests/Jellyfin.Plugin.Pgsql.Tests/Jellyfin.Plugin.Pgsql.Tests.csproj -c Release
+RUN python3 -m unittest discover -s tests -p 'test_*.py'
+ENV JELLYFIN_TEST_SERVER_DLL=/app/server/jellyfin.dll
+ENV JELLYFIN_TEST_PGLOADER=/usr/bin/pgloader
+ENTRYPOINT ["dotnet", "test", "tests/Jellyfin.Plugin.Pgsql.Tests/Jellyfin.Plugin.Pgsql.Tests.csproj", "-c", "Release", "--no-build", "--logger", "console;verbosity=normal"]
 
 # Final stage - Jellyfin with plugin
-FROM jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db
+FROM jellyfin/jellyfin:12.0@sha256:baba630419915985442f315f08b0cf46d9f4c8a0cc4bd38e94a6d35751dd5ef5
 
 # Install PostgreSQL 18 client tools for backup/restore functionality
 RUN apt-get update && \
@@ -33,10 +40,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the published plugin and config files
-COPY --from=build /app/publish/ /jellyfin-pgsql/plugin/
-# Replace only the server implementation assembly. The fork is pinned to the
-# exact Jellyfin base-image version, so all other server binaries stay stock.
-COPY --from=build /app/jellyfin-server/Jellyfin.Server.Implementations.dll /jellyfin/Jellyfin.Server.Implementations.dll
+COPY --from=build /app/provider/ /jellyfin-pgsql/plugin/
+# Keep all server assemblies and the runtime aligned with the pinned fork.
+# The official v12 base supplies its matching web client and FFmpeg.
+COPY --from=build /app/server/ /jellyfin/
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/database.xml /jellyfin-pgsql/database.xml
 # COPY docker/jellyfindb.load /jellyfin-pgsql/jellyfindb.load

@@ -1,8 +1,6 @@
 name: Validate custom fork
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -12,14 +10,14 @@ permissions:
 
 jobs:
   postgres-container-smoke-test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, k3s, linux, amd64]
     timeout-minutes: 45
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          submodules: recursive
+          submodules: true
 
       - name: Verify custom patches remain present
         run: |
@@ -28,8 +26,22 @@ jobs:
           test -f Jellyfin.Plugin.Pgsql/Migrations/20260802113543_AddQueryGeneratorSupport.cs
           git grep -q "POSTGRES_CONNECTION_STRING" -- docker Jellyfin.Plugin.Pgsql
 
+      - name: Connect to nested Docker daemon
+        run: |
+          gateway_hex="$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)"
+          test "${#gateway_hex}" -eq 8
+          printf -v docker_gateway '%d.%d.%d.%d' \
+            "0x${gateway_hex:6:2}" "0x${gateway_hex:4:2}" \
+            "0x${gateway_hex:2:2}" "0x${gateway_hex:0:2}"
+          docker_host="tcp://${docker_gateway}:2375"
+          DOCKER_HOST="$docker_host" docker version >/dev/null
+          echo "DOCKER_HOST=$docker_host" >> "$GITHUB_ENV"
+
       - name: Build custom image
         run: docker build -t jellyfin-pgsql-custom:test -f docker/Dockerfile .
+
+      - name: Build provider and startup regression tests
+        run: docker build --target tests -t jellyfin-pgsql-tests:test -f docker/Dockerfile .
 
       - name: Start PostgreSQL-backed Jellyfin and validate recovery
         run: |
@@ -71,6 +83,10 @@ jobs:
             sleep 2
           done
 
+          docker run --rm --network "${network}" \
+            -e JELLYFIN_TEST_POSTGRES_CONNECTION_STRING="Host=postgres;Port=5432;Database=postgres;Username=jellyfin;Password=test-only-password" \
+            jellyfin-pgsql-tests:test
+
           docker run -d \
             --name "${jellyfin}" \
             --network "${network}" \
@@ -105,3 +121,21 @@ jobs:
           docker exec "${postgres}" pg_dump -U jellyfin -d jellyfin -Fc -f /tmp/jellyfin.dump
           docker exec "${postgres}" createdb -U jellyfin jellyfin_restore
           docker exec "${postgres}" pg_restore -U jellyfin -d jellyfin_restore --exit-on-error /tmp/jellyfin.dump
+
+          docker restart "${jellyfin}"
+          for attempt in $(seq 1 60); do
+            if docker run --rm --network "${network}" curlimages/curl:8.17.0 \
+              -fsS http://jellyfin:8096/health >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              docker logs "${jellyfin}"
+              exit 1
+            fi
+            sleep 5
+          done
+          docker run --rm --network "${network}" curlimages/curl:8.17.0 \
+            -fsS http://jellyfin:8096/System/Info/Public | \
+            python3 -c 'import json,sys; v=json.load(sys.stdin)["Version"]; assert v.startswith("12."), v'
+          docker run --rm --network "${network}" curlimages/curl:8.17.0 \
+            -fsS http://jellyfin:8096/web/index.html >/dev/null

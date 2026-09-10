@@ -2,5 +2,37 @@ load database
     from sqlite:///config/data/jellyfin.db
     into pgsql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
 
-with quote identifiers, data only, truncate, drop indexes
-excluding table names like '__EFMigrationsHistory'
+with quote identifiers, create no tables, include no drop,
+     truncate, create no indexes, reset sequences, drop indexes
+excluding table names like '__EFMigrationsHistory', '__EFMigrationsLock', 'sqlite_%'
+
+after load do
+$$
+-- pgloader's reset sequences does not reset existing PostgreSQL identity columns.
+-- Reposition both identity and serial sequences after their imported values.
+DO $reset$
+DECLARE
+    identity_column record;
+    imported_max bigint;
+    sequence_start bigint;
+BEGIN
+    FOR identity_column IN
+        SELECT table_schema, table_name, column_name,
+               pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) AS sequence_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) IS NOT NULL
+    LOOP
+        EXECUTE format('SELECT MAX(%I) FROM %I.%I',
+                       identity_column.column_name, identity_column.table_schema, identity_column.table_name)
+            INTO imported_max;
+        SELECT seqstart INTO sequence_start
+        FROM pg_sequence
+        WHERE seqrelid = identity_column.sequence_name::regclass;
+        PERFORM setval(identity_column.sequence_name::regclass,
+                       greatest(coalesce(imported_max, sequence_start), sequence_start),
+                       imported_max IS NOT NULL AND imported_max >= sequence_start);
+    END LOOP;
+END
+$reset$;
+$$;

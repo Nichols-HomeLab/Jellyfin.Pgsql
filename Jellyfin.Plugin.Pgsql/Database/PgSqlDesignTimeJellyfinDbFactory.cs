@@ -1,19 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using Jellyfin.Database.Implementations;
-using Jellyfin.Database.Implementations.DbConfiguration;
 using Jellyfin.Database.Implementations.Locking;
-using Jellyfin.Server.Implementations;
-using MediaBrowser.Common.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace Jellyfin.Plugin.Pgsql.Database;
 

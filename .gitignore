@@ -6,3 +6,4 @@ artifacts
 
 .devcontainer/pgsql/
 docker/jellyfin.PgsqlMigrator.dll
+__pycache__/

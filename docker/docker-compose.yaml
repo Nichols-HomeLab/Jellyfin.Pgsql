@@ -1,18 +1,21 @@
 services:
   # no port exposed -- use a reverse proxy to jellyfin:8096/tcp or expose port 8096/tcp
   jellyfin:
-    build: /path/to/jellyfin-postgres/build # path where Dockerfile will be stored
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: jellyfin-pgsql:12.0-local
     depends_on:
       postgres:
         condition: service_healthy
         restart: true
     environment:
       JELLYFIN_CACHE_DIR: /cache
-      POSTGRES_CONNECTION_STRING: Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=change-me
+      POSTGRES_CONNECTION_STRING: Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       # Legacy connection variables may be used instead.
       POSTGRES_HOST: postgres
       POSTGRES_DB: jellyfin
-#      POSTGRES_PASSWORD: set a secure password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_USER: jellyfin
     restart: unless-stopped
 #    user: 'uid:gid' set a non-root user to run Jellyfin
@@ -24,7 +27,7 @@ services:
     environment:
       POSTGRES_DB: jellyfin
       POSTGRES_INITDB_WALDIR: /var/lib/postgresql-wal/18/docker # if you would like to put WAL on a separate filesystem
-#      POSTGRES_PASSWORD: set a secure password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_USER: jellyfin
       PGUSER: jellyfin
     image: postgres:18@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636

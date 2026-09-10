@@ -1,67 +1,56 @@
-name: '🐋 Build & Publish Docker Image'
-
+name: Build and publish PostgreSQL adapter
 on:
+  push:
+    branches: [main]
   release:
-    types:
-      - released
+    types: [released]
   workflow_dispatch:
+
+concurrency:
+  group: pgsql-image-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, k3s, linux, amd64]
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Checkout pinned server and provider
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Recursive checkout hits the nested plugins/Jellyfin.Pgsql
-          # submodule (an SSH URL gitea runners cannot clone). The build only
-          # needs the top-level jellyfin submodule, so fetch it explicitly.
           submodules: true
-      - name: Init jellyfin submodule
-        run: git submodule update --init --depth 1 jellyfin
 
-      - name: Determine image version
-        id: version
+      - name: Connect to nested Docker daemon
         run: |
-          # Extract the Jellyfin base version from the Dockerfile (handles optional AS alias)
-          # Strip any digest suffix: the FROM line is digest-pinned, and the
-          # naive [^\s]+ capture would include @sha256:... in the tag.
-          JELLYFIN_VERSION=$(grep -oP '(?<=FROM jellyfin/jellyfin:)[^@\s]+' docker/Dockerfile | head -1)
-          echo "jellyfin_version=$JELLYFIN_VERSION" >> "$GITHUB_OUTPUT"
+          gateway_hex="$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)"
+          test "${#gateway_hex}" -eq 8
+          printf -v docker_gateway '%d.%d.%d.%d' \
+            "0x${gateway_hex:6:2}" "0x${gateway_hex:4:2}" \
+            "0x${gateway_hex:2:2}" "0x${gateway_hex:0:2}"
+          docker_host="tcp://${docker_gateway}:2375"
+          DOCKER_HOST="$docker_host" docker version >/dev/null
+          echo "DOCKER_HOST=$docker_host" >> "$GITHUB_ENV"
 
-          IMAGE_OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
-          IMAGE_TAG="${JELLYFIN_VERSION}-nichols.${GITHUB_RUN_NUMBER}"
-          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
-          echo "Computed image tag: $IMAGE_TAG"
-
-          TAGS="ghcr.io/${IMAGE_OWNER}/jellyfin.pgsql:${IMAGE_TAG}"$'\n'"ghcr.io/${IMAGE_OWNER}/jellyfin.pgsql:latest"
-          # Use a multiline-safe delimiter for the output
-          {
-            echo "tags<<EOF"
-            echo "$TAGS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: git.nicholstech.org
+          username: admin
+          password: ${{ secrets.REGISTRY_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7.3.0
+      - name: Build and push image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: docker/Dockerfile
+          platforms: linux/amd64
           push: true
-          tags: ${{ steps.version.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            git.nicholstech.org/nichols-homelab/jellyfin.pgsql:12.0-nichols.${{ github.run_number }}
+            git.nicholstech.org/nichols-homelab/jellyfin.pgsql:sha-${{ github.sha }}
+            git.nicholstech.org/nichols-homelab/jellyfin.pgsql:latest
