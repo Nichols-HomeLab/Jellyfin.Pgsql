@@ -222,7 +222,7 @@ public sealed class PgSqlDatabaseProvider : IJellyfinDatabaseProvider
                 _logger.LogCritical("Tried to restore a backup that does not exist: {Key}", key);
             }
 
-            return;
+            throw new FileNotFoundException("The PostgreSQL backup required for restoration does not exist.", backupFile);
         }
 
         var process = new Process
@@ -230,7 +230,7 @@ public sealed class PgSqlDatabaseProvider : IJellyfinDatabaseProvider
             StartInfo = new ProcessStartInfo
             {
                 FileName = "psql",
-                Arguments = $"--host={connectionBuilder.Host} --port={connectionBuilder.Port} --username={connectionBuilder.Username} --dbname={connectionBuilder.Database} --file=\"{backupFile}\" --no-password --quiet",
+                Arguments = $"--host={connectionBuilder.Host} --port={connectionBuilder.Port} --username={connectionBuilder.Username} --dbname={connectionBuilder.Database} --file=\"{backupFile}\" --no-password --quiet --set=ON_ERROR_STOP=on --single-transaction",
                 Environment = { ["PGPASSWORD"] = connectionBuilder.Password },
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
