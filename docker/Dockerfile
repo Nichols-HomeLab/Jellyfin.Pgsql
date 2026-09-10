@@ -15,7 +15,7 @@ FROM build AS tests
 COPY tests/ ./tests/
 COPY docker/ ./docker/
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 wget ca-certificates gnupg lsb-release \
+    && apt-get install -y --no-install-recommends python3 wget ca-certificates gnupg lsb-release libfontconfig1 \
     && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg
 RUN echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] https://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 pgloader \
