@@ -25,7 +25,7 @@ services:
     networks:
       - jellynetwork
   jellydb:
-    image: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    image: postgres:18.6@sha256:fc973eb97c9fd04bfa1840e0f510719a584ccb3be8debfe6a4144637a9dfe8cf
     restart: unless-stopped
     hostname: jellydb
     volumes:
@@ -37,7 +37,7 @@ services:
     networks:
       - jellynetwork
   pgadmin:
-    image: dpage/pgadmin4@sha256:2f4ce946ddf8360680d7eff4eaba1d91859eb6b4003e6623bad5c63a322c2f4d
+    image: dpage/pgadmin4@sha256:c332c5f6dfba995d9ebc4af261d93506d6876085d712eaaa3defc8dd1a3f26de
     restart: unless-stopped
     depends_on:
       - jellydb
